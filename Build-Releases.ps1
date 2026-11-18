@@ -7,7 +7,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 $scriptDirectory = Split-Path -Parent $MyInvocation.MyCommand.Path
-$projectDirectory = Join-Path $scriptDirectory "CodeScan"
+$projectDirectory = $scriptDirectory
 $projectPath = Join-Path $projectDirectory "CodeScan.csproj"
 $targetFramework = "net7.0"
 $outputDirectory = Join-Path $projectDirectory "bin\$Configuration\$targetFramework"
@@ -15,16 +15,15 @@ $runtimeIdentifiers = @("win-x64", "linux-x64", "osx-x64")
 
 if (-not $FilesToMoveToManagedPath) {
 	$candidates = @(
-		(Join-Path $outputDirectory "FilesToMoveToManaged.json"),
-		(Join-Path (Join-Path $projectDirectory "bin\Debug\$targetFramework") "FilesToMoveToManaged.json"),
 		(Join-Path $projectDirectory "FilesToMoveToManaged.json"),
-		(Join-Path $scriptDirectory "FilesToMoveToManaged.json")
+		(Join-Path $outputDirectory "FilesToMoveToManaged.json"),
+		(Join-Path (Join-Path $projectDirectory "bin\Debug\$targetFramework") "FilesToMoveToManaged.json")
 	)
 	$FilesToMoveToManagedPath = $candidates | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
 }
 
 if (-not $FilesToMoveToManagedPath -or -not (Test-Path -LiteralPath $FilesToMoveToManagedPath -PathType Leaf)) {
-	throw "FilesToMoveToManaged.json was not found. Pass -FilesToMoveToManagedPath or place it in the project/bin output directory."
+	throw "FilesToMoveToManaged.json was not found. Pass -FilesToMoveToManagedPath or place it beside Build-Releases.ps1."
 }
 
 $FilesToMoveToManagedPath = (Resolve-Path -LiteralPath $FilesToMoveToManagedPath).Path
@@ -65,7 +64,8 @@ foreach ($runtimeIdentifier in $runtimeIdentifiers) {
 		if (Test-Path -LiteralPath $stagingDirectory) {
 			$resolvedStagingDirectory = (Resolve-Path -LiteralPath $stagingDirectory).Path
 			$resolvedOutputDirectory = (Resolve-Path -LiteralPath $outputDirectory).Path
-			if (-not $resolvedStagingDirectory.StartsWith($resolvedOutputDirectory, [StringComparison]::OrdinalIgnoreCase)) {
+			$outputPrefix = $resolvedOutputDirectory.TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+			if (-not $resolvedStagingDirectory.StartsWith($outputPrefix, [StringComparison]::OrdinalIgnoreCase)) {
 				throw "Refusing to remove staging directory outside the package output: $resolvedStagingDirectory"
 			}
 			Remove-Item -LiteralPath $resolvedStagingDirectory -Recurse -Force

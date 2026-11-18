@@ -16,8 +16,6 @@ dotnet build -c Debug -r win-x64
 dotnet build -c Debug -r osx-x64
 ```
 
-At runtime, the tool expects `FilesToMoveToManaged.json` one directory above the executable directory. That file is deserialized as a list of filename substrings. The code's build output includes a copy of this file; when packaging or running from a different layout, preserve the expected relative location.
-
 The player build path is selected from arguments. The first argument containing `>` is treated as the path after removing `>`; absent such an argument, the source contains a developer-specific default path. The path is expected to point at the build root, which contains one of:
 
 | OS      | Managed assembly directory                |

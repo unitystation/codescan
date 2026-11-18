@@ -1,0 +1,53 @@
+name: Build and release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: pwsh
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '7.0.x'
+
+      - name: Build release archives
+        run: ./Build-Releases.ps1 -Configuration Release
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: build-${{ github.run_number }}-${{ github.run_attempt }}
+        run: |
+          $archives = @(
+            'bin/Release/net7.0/win-x64.zip',
+            'bin/Release/net7.0/linux-x64.zip',
+            'bin/Release/net7.0/osx-x64.zip'
+          )
+          foreach ($archive in $archives) {
+            if (-not (Test-Path -LiteralPath $archive -PathType Leaf)) {
+              throw "Release archive is missing: $archive"
+            }
+          }
+          gh release create $env:RELEASE_TAG @archives `
+            --target $env:GITHUB_SHA `
+            --title "CodeScan $env:RELEASE_TAG" `
+            --generate-notes
+          if ($LASTEXITCODE -ne 0) {
+            throw "GitHub release creation failed with exit code $LASTEXITCODE"
+          }

@@ -1,0 +1,35 @@
+# .NET build and publish output
+[Bb]in/
+[Oo]bj/
+artifacts/
+[Tt]est[Rr]esults/
+*.nupkg
+*.snupkg
+*.binlog
+
+# Visual Studio, Rider, and user-specific settings
+.vs/
+.idea/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.DotSettings.user
+
+# Logs, temporary files, and operating-system metadata
+*.log
+*.tmp
+*.temp
+*.bak
+*.swp
+*~
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Local environment and scanner output
+.env
+.env.*
+!.env.example
+errors.json
+MissingAssemblies/
