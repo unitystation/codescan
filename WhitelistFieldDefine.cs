@@ -1,14 +1,7 @@
-﻿namespace UnitystationLauncher.ContentScanning
-{
-	public sealed class WhitelistFieldDefine
-	{
-		public string Name { get; }
-		public MType FieldType { get; }
+﻿namespace CodeScan;
 
-		public WhitelistFieldDefine(string name, MType fieldType)
-		{
-			Name = name;
-			FieldType = fieldType;
-		}
-	}
+public sealed class WhitelistFieldDefine(string name, MType fieldType)
+{
+	public string Name { get; } = name;
+	public MType FieldType { get; } = fieldType;
 }

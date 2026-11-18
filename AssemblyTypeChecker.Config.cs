@@ -1,119 +1,106 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Data;
-using System.Diagnostics;
-using System.Net.Http;
-using System.Threading.Tasks;
-using CodeScan;
-using Newtonsoft.Json;
+﻿using System.Data;
+using System.Text.Json;
 using Pidgin;
 
-namespace UnitystationLauncher.ContentScanning
+namespace CodeScan;
 
+public sealed partial class AssemblyTypeChecker
 {
-	public sealed partial class AssemblyTypeChecker
-	{
-		private static string NameConfig = @"CodeScanList.json";
+	private static readonly HttpClient HttpClient = new();
 
-		private async Task<SandboxConfig> LoadConfig()
+	private async Task<SandboxConfig> LoadConfig()
+	{
+		var response =
+			await HttpClient.GetAsync(
+				"https://raw.githubusercontent.com/unitystation/unitystation/develop/CodeScanList.json");
+		if (response.IsSuccessStatusCode)
 		{
-			var httpClient = new HttpClient();
-			var response =
-				await httpClient.GetAsync(
-					"https://raw.githubusercontent.com/unitystation/unitystation/develop/CodeScanList.json");
-			if (response.IsSuccessStatusCode)
+			var jsonData = await response.Content.ReadAsStringAsync();
+			try
 			{
-				var jsonData = await response.Content.ReadAsStringAsync();
+				var data = JsonSerializer.Deserialize(jsonData, CodeScanJsonContext.Default.SandboxConfig);
+
+				if (data == null)
+				{
+					//Log.Error("unable to de-serialise config");
+					ThisMain.Errors.Add("unable to de-serialise config");
+					throw new DataException("unable to de-serialise config");
+				}
+
+				foreach (var @namespace in data.Types)
+				{
+					foreach (var @class in @namespace.Value)
+					{
+						ParseTypeConfig(@class.Value);
+					}
+				}
+
+				return data;
+			}
+			catch (Exception e)
+			{
+				ThisMain.Errors.Add(e.ToString());
+				Console.WriteLine(e);
+				throw;
+			}
+		}
+		ThisMain.Errors.Add("Unable to download config" + response.ToString());
+		throw new DataException("Unable to download config");
+	}
+
+	private static void ParseTypeConfig(TypeConfig cfg)
+	{
+		if (cfg.Methods != null)
+		{
+			var list = new List<WhitelistMethodDefine>();
+			foreach (var m in cfg.Methods)
+			{
 				try
 				{
-					var data = JsonConvert.DeserializeObject<SandboxConfig>(jsonData);
-
-					if (data == null)
-					{
-						//Log.Error("unable to de-serialise config");
-						ThisMain.Errors.Add("unable to de-serialise config");
-						throw new DataException("unable to de-serialise config");
-					}
-
-					foreach (var @namespace in data.Types)
-					{
-						foreach (var @class in @namespace.Value)
-						{
-							ParseTypeConfig(@class.Value);
-						}
-					}
-
-					return data;
+					list.Add(Parsers.MethodParser.ParseOrThrow(m));
 				}
-				catch (Exception e)
+				catch (ParseException e)
 				{
-					ThisMain.Errors.Add(e.ToString());
-					Console.WriteLine(e);
-					throw;
+					ThisMain.Errors.Add($"Parse exception for '{m}': {e}");
+					return;
 				}
 			}
-			else
-			{
-				ThisMain.Errors.Add("Unable to download config" + response.ToString());
-			}
 
-			return null;
+			cfg.MethodsParsed = list.ToArray();
+		}
+		else
+		{
+			cfg.MethodsParsed = Array.Empty<WhitelistMethodDefine>();
 		}
 
-		private static void ParseTypeConfig(TypeConfig cfg)
+		if (cfg.Fields != null)
 		{
-			if (cfg.Methods != null)
+			var list = new List<WhitelistFieldDefine>();
+			foreach (var f in cfg.Fields)
 			{
-				var list = new List<WhitelistMethodDefine>();
-				foreach (var m in cfg.Methods)
+				try
 				{
-					try
-					{
-						list.Add(Parsers.MethodParser.ParseOrThrow(m));
-					}
-					catch (ParseException e)
-					{
-						ThisMain.Errors.Add($"Parse exception for '{m}': {e}");
-						return;
-					}
+					list.Add(Parsers.FieldParser.ParseOrThrow(f));
 				}
-
-				cfg.MethodsParsed = list.ToArray();
-			}
-			else
-			{
-				cfg.MethodsParsed = Array.Empty<WhitelistMethodDefine>();
-			}
-
-			if (cfg.Fields != null)
-			{
-				var list = new List<WhitelistFieldDefine>();
-				foreach (var f in cfg.Fields)
+				catch (ParseException e)
 				{
-					try
-					{
-						list.Add(Parsers.FieldParser.ParseOrThrow(f));
-					}
-					catch (ParseException e)
-					{
-						ThisMain.Errors.Add($"Parse exception for '{f}': {e}");
-						return;
-					}
+					ThisMain.Errors.Add($"Parse exception for '{f}': {e}");
+					return;
 				}
-
-				cfg.FieldsParsed = list.ToArray();
-			}
-			else
-			{
-				cfg.FieldsParsed = Array.Empty<WhitelistFieldDefine>();
 			}
 
-			if (cfg.NestedTypes != null)
+			cfg.FieldsParsed = list.ToArray();
+		}
+		else
+		{
+			cfg.FieldsParsed = Array.Empty<WhitelistFieldDefine>();
+		}
+
+		if (cfg.NestedTypes != null)
+		{
+			foreach (var nested in cfg.NestedTypes.Values)
 			{
-				foreach (var nested in cfg.NestedTypes.Values)
-				{
-					ParseTypeConfig(nested);
-				}
+				ParseTypeConfig(nested);
 			}
 		}
 	}

@@ -1,66 +1,58 @@
-﻿using System.Reflection;
-using System.Text.Json;
-using Newtonsoft.Json;
-using UnitystationLauncher.ContentScanning;
-using JsonSerializer = System.Text.Json.JsonSerializer;
+﻿using System.Text.Json;
 
 namespace CodeScan;
 
 public static class ThisMain
 {
-	public static List<string> Errors = new List<string>();
+	public static readonly List<string> Errors = [];
 
-	public static List<string> Infos = new List<string>();
+	private static readonly HashSet<string> GoodFiles = [];
 
-	public static HashSet<string> goodFiles = new HashSet<string>()
-		{ };
-
-	public static List<string> FilesToMoveToManaged = new List<string>() { };
-
-
+	private static List<string> _filesToMoveToManaged = new()
+	{
+		Capacity = 0
+	};
+	
 	public static async Task Main(string[] args)
 	{
 		// Get the location of the executable.
-		string executablePath = Assembly.GetEntryAssembly().Location.Replace("CodeScan.dll", "");
-		string correctedWhitelistPath = Path.Combine(Path.GetDirectoryName(executablePath), "CodeScanList.corrected.json");
-		AssemblyTypeChecker dat = null;
+		string executableDirectory = AppContext.BaseDirectory;
+		string correctedWhitelistPath = Path.Combine(executableDirectory, "CodeScanList.corrected.json");
+		AssemblyTypeChecker? dat = null;
 
 		try
 		{
 			if (File.Exists(correctedWhitelistPath)) File.Delete(correctedWhitelistPath);
 
-			bool MemoryClearingMode = false;
+			bool memoryClearingMode = false;
 
 			foreach (var arg in args)
 			{
 				if (arg.Contains('@'))
 				{
-					MemoryClearingMode = true;
+					memoryClearingMode = true;
 				}
 			}
 
-			using (StreamReader r = new StreamReader( Path.Combine( executablePath,".."  , "FilesToMoveToManaged.json")))
+			using (StreamReader r = new StreamReader( Path.Combine(executableDirectory, "..", "FilesToMoveToManaged.json")))
 			{
-				string Injson = r.ReadToEnd();
-				FilesToMoveToManaged = JsonConvert.DeserializeObject<List<string>>(Injson);
+				string injson = await r.ReadToEndAsync();
+				_filesToMoveToManaged = JsonSerializer.Deserialize(injson, CodeScanJsonContext.Default.ListString)
+					?? throw new InvalidDataException("FilesToMoveToManaged.json is empty");
 			}
 
 
-			if (MemoryClearingMode)
+			if (memoryClearingMode)
 			{
 			}
 			else
 			{
 				try
 				{
-					Action<string> info = new Action<string>((string log) =>
-					{
-						Infos.Add(log);
-					});
-					Action<string> error = new Action<string>((string log) => { Errors.Add(log); });
+					Action<string> info = Console.WriteLine;
+					Action<string> error = log => { Errors.Add(log); };
 
-					var goodPath =
-						@"J:/SuperFast Programs/ss13 development/unitystation/Tools/CodeScanning/CodeScan/CodeScan/bin/Debug/net7.0/Windows";
+					string? goodPath = null;
 
 					foreach (var arg in args)
 					{
@@ -72,34 +64,40 @@ public static class ThisMain
 					}
 
 
+					if (goodPath == null)
+					{
+						throw new ArgumentException("No build path given. Pass it as an argument prefixed with '>', e.g. \">/path/to/build\"");
+					}
+
 					List<string> multiAssemblyReference = new List<string>();
 					dat = new AssemblyTypeChecker();
 
-					var OSText = "";
-					var ManagedPath = "";
+					var osText = "";
+					var managedPath = "";
 
 					if (OperatingSystem.IsWindows())
 					{
-						ManagedPath = @"Unitystation_Data/Managed";
-						OSText = "Windows";
+						managedPath = @"Unitystation_Data/Managed";
+						osText = "Windows";
 					}
 
 					if (OperatingSystem.IsLinux())
 					{
-						ManagedPath = @"Unitystation_Data/Managed";
-						OSText = "Linux";
+						managedPath = @"Unitystation_Data/Managed";
+						osText = "Linux";
 					}
 
 					if (OperatingSystem.IsMacOS())
 					{
-						ManagedPath = @"Mac.app/Contents/Resources/Data/Managed";
-						OSText = "Mac";
+						managedPath = @"Mac.app/Contents/Resources/Data/Managed";
+						osText = "Mac";
 					}
 
-					DirectoryInfo directory = new DirectoryInfo(Path.Combine(goodPath, ManagedPath));
-					DirectoryInfo? GoodFiles = new DirectoryInfo(Assembly.GetEntryAssembly().Location.Replace("CodeScan.dll", "")).Parent;
-					GoodFiles = GoodFiles.CreateSubdirectory("MissingAssemblies");
-					GoodFiles = GoodFiles.CreateSubdirectory(OSText);
+					DirectoryInfo directory = new DirectoryInfo(Path.Combine(goodPath, managedPath));
+					DirectoryInfo goodFilesPath = new DirectoryInfo(executableDirectory).Parent
+						?? throw new DirectoryNotFoundException("Executable directory has no parent");
+					goodFilesPath = goodFilesPath.CreateSubdirectory("MissingAssemblies");
+					goodFilesPath = goodFilesPath.CreateSubdirectory(osText);
 
 					// Get a list of files in the source directory
 					var files = directory.GetFiles();
@@ -110,23 +108,23 @@ public static class ThisMain
 						string fileName = file.Name;
 
 						// Check if any pattern in the list matches the file name
-						if (FilesToMoveToManaged.Any(Name => fileName.Contains(Name)))
+						if (_filesToMoveToManaged.Any(Name => fileName.Contains(Name)))
 						{
-							string destinationFilePath = Path.Combine(GoodFiles.ToString(), fileName);
+							string destinationFilePath = Path.Combine(goodFilesPath.ToString(), fileName);
 							File.Copy(file.ToString(), destinationFilePath, true);
 							Console.WriteLine($"Copied: {fileName}");
 						}
 					}
 
 
-					goodFiles.UnionWith(
-						GoodFiles.GetFiles().Select(x => x.Name).ToHashSet()
+					GoodFiles.UnionWith(
+						goodFilesPath.GetFiles().Select(x => x.Name).ToHashSet()
 						);
 
 
 					foreach (var file in directory.GetFiles())
 					{
-						if (goodFiles.Contains(file.Name)) continue;
+						if (GoodFiles.Contains(file.Name)) continue;
 						if (file.Extension == ".pdb") continue;
 						multiAssemblyReference.Add(Path.GetFileNameWithoutExtension(file.Name));
 					}
@@ -135,10 +133,10 @@ public static class ThisMain
 					foreach (var file in directory.GetFiles())
 					{
 						var listy = multiAssemblyReference.ToList();
-						if (goodFiles.Contains(file.Name)) continue;
+						if (GoodFiles.Contains(file.Name)) continue;
 						if (file.Extension == ".pdb") continue;
 						listy.Remove(Path.GetFileNameWithoutExtension(file.Name));
-						if (dat.CheckAssembly(file, directory, listy, info, error) == false)
+						if (dat.CheckAssembly(file, directory, goodFilesPath, listy, info, error) == false)
 						{
 							Errors.Add($"{file.Name} Failed scanning Cancelling");
 						}
@@ -171,10 +169,10 @@ public static class ThisMain
 		}
 
 		// Construct the JSON file path next to the executable
-		string jsonFilePath = Path.Combine(Path.GetDirectoryName(executablePath), "errors.json");
+		string jsonFilePath = Path.Combine(executableDirectory, "errors.json");
 
 		// Serialize the data to JSON and write it to the file
-		string json = JsonSerializer.Serialize(Errors, new JsonSerializerOptions {WriteIndented = true});
-		File.WriteAllText(jsonFilePath, json);
+		string json = JsonSerializer.Serialize(Errors, CodeScanJsonContext.Default.ListString);
+		await File.WriteAllTextAsync(jsonFilePath, json);
 	}
 }
