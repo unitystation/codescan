@@ -1,13 +1,11 @@
-﻿namespace UnitystationLauncher.ContentScanning
+﻿namespace CodeScan;
+
+public enum InheritMode : byte
 {
-	public enum InheritMode : byte
-	{
-		// Allow if All is set, block otherwise
-		Default,
-		Allow,
+	// Allow if All is set, block otherwise
+	Default,
+	Allow,
 
-		// Block even is All is set
-		Block
-	}
+	// Block even is All is set
+	Block
 }
-

@@ -1,23 +1,22 @@
-﻿namespace UnitystationLauncher.ContentScanning
+﻿namespace CodeScan;
+
+public record MType
 {
-	public record MType
+	public virtual bool WhitelistEquals(MType other)
 	{
-		public virtual bool WhitelistEquals(MType other)
-		{
-			return false;
-		}
+		return false;
+	}
 
-		public virtual bool IsCoreTypeDefined()
-		{
-			return false;
-		}
+	public virtual bool IsCoreTypeDefined()
+	{
+		return false;
+	}
 
-		/// <summary>
-		/// Outputs this type in a format re-parseable for the sandbox config whitelist.
-		/// </summary>
-		public virtual string? WhitelistToString()
-		{
-			return ToString();
-		}
+	/// <summary>
+	/// Outputs this type in a format re-parseable for the sandbox config whitelist.
+	/// </summary>
+	public virtual string? WhitelistToString()
+	{
+		return ToString();
 	}
 }

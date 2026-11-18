@@ -1,3 +1,0 @@
-dotnet build -c Debug -r linux-x64
-dotnet build -c Debug -r win-x64
-dotnet build -c Debug -r osx-x64
